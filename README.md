@@ -5,12 +5,17 @@ Please refer the GUI Demo video file provided to visually understand the tool's 
 
 Steps:
 ------
-# Installation
+Installation
+------------
 1. Install Miniconda/Anaconda. Create a new conda virtual environment:
-      conda create -n <env-name>
+```
+   conda create -n <env-name>
+```
+3. Install the required packages from requirements.txt file
 
-2. Install the required packages from requirements.txt file
-
-# Executing the Code
+Executing the Code
+------------------
 1. Run the labelingtool.py from terminal
-      python3 labelingtool.py
+```
+    python3 labelingtool.py
+```
