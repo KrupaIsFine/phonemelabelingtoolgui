@@ -28,3 +28,5 @@ Executing the Code
 ```
     python3 labelingtool.py
 ```
+2. Load the .wav file and .lab file into the GUI with 'Load Audio' and 'Load Dataset' buttons
+3. Refer to the video demo of the GUI for understanding the flow and functionality of the GUI
