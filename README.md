@@ -7,11 +7,20 @@ Steps:
 ------
 Installation
 ------------
-1. Install Miniconda/Anaconda. Create a new conda virtual environment:
+1. Install Miniconda/Anaconda. Create a new conda virtual environment
 ```
    conda create -n <env-name>
 ```
-3. Install the required packages from requirements.txt file
+2. Activate your new environment
+```
+   conda activate <env-name>
+```
+3. Install the required packages
+```
+   conda install PyQt5==5.15.10
+   conda install pyqtgraph==0.13.3
+   conda install sounddevice==0.4.6
+```
 
 Executing the Code
 ------------------
