@@ -258,7 +258,6 @@ class MyMainWindow(QMainWindow):
 
 
     def adjust_next_region(self, current_region_item):
-        # Assuming region_items is a list containing all region items
         index_current = self.region_items.index(current_region_item)
         print("index current: ", index_current)
         print("len self region: ", len(self.region_items))
