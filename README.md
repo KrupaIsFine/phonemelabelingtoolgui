@@ -16,7 +16,8 @@ Installation
    conda activate <env-name>
 ```
 3. Install the required packages
-```conda install pip
+```
+   conda install pip
    pip install PyQt5==5.15.10
    pip install pyqtgraph==0.13.3
    pip install sounddevice==0.4.6
