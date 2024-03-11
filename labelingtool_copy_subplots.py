@@ -319,6 +319,17 @@ class MyMainWindow(QMainWindow):
                 previous_region_item = self.region_items[index_current - 1]
                 previous_start_time, _ = previous_region_item.getRegion()
                 previous_region_item.setRegion([previous_start_time, current_start_time])
+                # Toggle the appearance of the region item
+                # current_brush_color = self.brush.color().name()
+                # print("color: ", current_brush_color)       
+                # Determine the new brush color
+                new_brush_color = QColor('#0000ff')
+                # print("new color: ", new_brush_color.name())
+                new_brush_color.setAlpha(25)       
+                # Set the brush color
+                next_region_item.setBrush(new_brush_color)
+                current_region_item.setBrush(new_brush_color)
+                # print("Brush color after setting: ", previous_region_item.brush.color().name())  # Debugging
 
     def display_clicked_values(self, region_item, start_time, end_time, flag):
         # Toggle the appearance of the region item
@@ -532,7 +543,13 @@ class MyMainWindow(QMainWindow):
 
     def plot_graph(self, layout_widget, path):
         # Open the audio file and extract data
-        # layout = layout_widget
+        # layout = 
+        viewBox = pg.ViewBox()
+        self.plot_item2 = pg.PlotItem(viewBox=viewBox)
+
+        # Add plot_item2 to the layout
+        self.layout_widget.addItem(self.plot_item2, 1, 0, 1, 1)
+
         wave_obj = wave.open(path, 'rb')
         sample_width = wave_obj.getsampwidth()
         num_frames = wave_obj.getnframes()
@@ -562,66 +579,34 @@ class MyMainWindow(QMainWindow):
         print("amplitude: ", len(amplitude))
         self.curve.setData(time, amplitude)
 
-        D = librosa.stft(audio_data)
+        # Compute spectrogram
+        n_fft = 2048  # FFT window size
+        hop_length = 256  # Hop length (frame shift)
+        D = librosa.stft(audio_data, n_fft=n_fft, hop_length=hop_length)
         spec = librosa.amplitude_to_db(np.abs(D), ref=np.max)
+        # Transpose the spectrogram
+        spec = spec.T
+        # Adjust time axis
+        time_resolution = hop_length / sample_rate
+        time_axis = np.arange(0, audio_duration, time_resolution)
 
-        # Working code to display spectrogram image, this is embedded into the GUI
-        # Create a Matplotlib figure
-        fig, ax = plt.subplots(figsize=(10,10))
+        # Plot spectrogram
+        img = pg.ImageItem(spec)
+        self.plot_item2.addItem(img)
+        img.setRect(0, 0, audio_duration * 1e7, sample_rate / 2)
+        # Set gray_r colormap
+        cmap = pg.ColorMap([0, 255], [(255, 255, 255), (0, 0, 0)])
+        lut = cmap.getLookupTable(0, 255, 256)
+        img.setLookupTable(lut)
 
-        # Plot the spectrogram
-        # Plot the grayscale spectrogram
-        # For displaying colorbar
-        img = librosa.display.specshow(spec, sr=sample_rate, cmap='gray', ax=ax)
-
-        # ax.set(title="Spectrogram")
-        # fig.colorbar(img, ax=ax, format="%+2.f dB")
-        # plt.title('Spectrogram')
-        # plt.ylabel('Frequency [Hz]')
-        # plt.xlabel('Time [sec]')
-        # Show the plot
-        plt.show()
-
-        # Convert the Matplotlib figure to QPixmap
-        fig.canvas.draw()
-        buf = fig.canvas.buffer_rgba()
-        qim = QImage(buf, buf.shape[1], buf.shape[0], QImage.Format_ARGB32)
-        qim = qim.rgbSwapped().mirrored(vertical=True)
-        # Assuming qim is your QImage object
-        new_width = 50000  # New width
-        new_height = 600  # New height
-        qim = qim.scaled(new_width, new_height)
-
-        pixmap = QPixmap.fromImage(qim)
-
-        # Display the QPixmap in a QLabel
-        # self.label = QLabel()
-        # self.label.setPixmap(pixmap)
-        # img = "/home/krupa/Pictures/p1.png"
-        # self.grid = QGridLayout()
-        # pixmap = QPixmap(img)
-        # Create a QGraphicsPixmapItem with the QPixmap
-        pixmap_item = QGraphicsPixmapItem(pixmap)
-
-        # Set the size of the pixmap_item to match the size of the plot_item2
-        # pixmap_item.setPos(0, 0)  # Set position at the top-left corner
-        # pixmap_item.setScale(1.0)  # Set scale to 1.0 (no scaling)
-        # pixmap_item.setOffset(0, 0)  # Set offset to 0
-
-        self.plot_item2.addItem(pixmap_item)
-        self.plot_item2.getViewBox().setAspectLocked(False)
-        # self.plot_item.autoRange()
-        self.plot_item2.autoRange()
-        print("self.plot_item2.autoRange(): ", self.plot_item2.autoRange())
-        # Set the range for the x-axis
-        # self.plot_item.setXRange(0, audio_duration * 1e7)
-        # self.plot_item2.setXRange(0, audio_duration * 1e7)
-        # self.plot_item2.setXRange(0, 500)
-
-        # Set the range for the y-axis
-        # self.plot_item2.setYRange(0, 1)
-
-
+        # Set labels and axis ranges
+        self.plot_item2.setLabel('left', 'Frequency', units='Hz')
+        self.plot_item2.setLabel('bottom', 'Time', units='s')
+        # self.plot_item.setXRange(0, audio_duration)
+        # self.plot_item.setYRange(0, sample_rate / 2)
+        self.plot_item2.setXRange(0, audio_duration)
+        self.plot_item2.setYRange(0, sample_rate / 2)
+        self.curve.setData(time, amplitude)
     def resizeEvent(self, event):
         # Resize the plot widget along with the central widget
         new_size = event.size()
