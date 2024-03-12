@@ -9,7 +9,8 @@ import librosa.display
 from pyqtgraph import QtGui
 from PyQt5.QtWidgets import QGraphicsScene
 from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog
-from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtGui import QPixmap, QImage, QPainter
+from PyQt5.QtCore import QRectF
 from PyQt5.QtWidgets import QGraphicsPixmapItem
 from PyQt5.QtWidgets import QGraphicsScene, QGraphicsView, QApplication, QGraphicsPixmapItem
 from PyQt5 import QtGui
@@ -31,7 +32,7 @@ from PyQt5.QtGui import QColor
 from PyQt5.QtCore import pyqtSignal
 from pyqtgraph import LinearRegionItem
 import pyqtgraph as pg
-from pycutie_6 import Ui_MainWindow # was using pycutie_3 previously, for working version
+from pycutie_3 import Ui_MainWindow # was using pycutie_3 previously, for working version
 from scipy.signal import spectrogram
 dct_obj = {}
 prob_threshold = 0.5
@@ -96,7 +97,7 @@ class LinearRegionItem(pg.LinearRegionItem):
         current_brush_color = self.brush.color().name()
         print("color: ", current_brush_color)       
         # Determine the new brush color
-        new_brush_color = QColor('#ffff00')
+        new_brush_color = QColor('#0000ff')
         print("new color: ", new_brush_color.name())
         new_brush_color.setAlpha(25)       
         # Set the brush color
@@ -131,7 +132,9 @@ class MyMainWindow(QMainWindow):
         self.plot_item = pg.PlotItem() 
                 # Set the range for the x-axis
         # self.plot_item.setXRange(0, 1)
-
+        # Create a ViewBox
+        self.viewbox = pg.ViewBox()
+        self.viewbox2 = pg.ViewBox()
         # Set the range for the y-axis
         # self.plot_item.setYRange(0, 1)
         self.plot_item2 = pg.PlotItem() # Set a white background
@@ -144,7 +147,7 @@ class MyMainWindow(QMainWindow):
         # proxy.addItem(self.plot_item)
         # Set contents margins to zero
         
-        p1 = self.layout_widget.addItem(self.plot_item)
+        p1 = self.layout_widget.addItem(self.plot_item, 0, 0, 1, 1)
 
        
         # Remove spacing between plots
@@ -158,21 +161,44 @@ class MyMainWindow(QMainWindow):
         # proxy2 = QGraphicsProxyWidget()
         # proxy2.addItem(self.plot_item2)
         # Set contents margins to zero
+        # self.viewbox.invertY(True)  # Set to True to invert the y-axis
 
-        p2 = self.layout_widget.addItem(self.plot_item2)
+        p2 = self.layout_widget.addItem(self.plot_item2, 1, 0, 1, 1)
         self.plot_item2.setYLink(self.plot_item)
         self.plot_item2.setXLink(self.plot_item)
+        # Hide the x-axis ticks
+        self.plot_item.getAxis("bottom").setTicks([])
+        
+        # Optionally, hide the x-axis label as well
+        self.plot_item.getAxis("bottom").setLabel("")
+        # self.plot_item.getAxis("left").setTicks([])
+        
+        # Optionally, hide the x-axis label as well
+        self.plot_item.getAxis("left").setLabel("Amplitude")
+        self.plot_item2.getAxis("left").setTicks([])
+        
+        # Optionally, hide the x-axis label as well
+        self.plot_item2.getAxis("left").setLabel("Frequency")
+        # Hide the axes of the second plot item
+        # self.plot_item.getAxis('left').setVisible(False)
+        # self.plot_item.getAxis('bottom').setVisible(False)
         # print("p1: ", len(p1))
         # print("p2: ", len(p2))
         if p1 is not None and p2 is not None:
             print("linking is working")
-            p2.setYLink(p1)
+            p1.setYLink(p2)
+        # Add the ViewBox to the layout
 
         # p2.setYLink('Plot1')  ## test linking by name
         scene = QGraphicsScene()
         # max_width = scene.sceneRect().width()
         # max_height = scene.sceneRect().height()
-        self.layout_widget.setGeometry(0, 0, 1800, 750)
+        # self.layout_widget.addItem(self.viewbox)
+        self.layout_widget.setGeometry(0, 0, 1500, 800)
+        # Scale the layout widget to ensure high-resolution rendering
+
+        self.layout_widget.scale(16, 16)  # Increase scale factor as needed for higher resolution
+
         scene.addWidget(self.layout_widget)
 
         self.ui.graphicsView.setScene(scene)
@@ -323,7 +349,7 @@ class MyMainWindow(QMainWindow):
                 # current_brush_color = self.brush.color().name()
                 # print("color: ", current_brush_color)       
                 # Determine the new brush color
-                new_brush_color = QColor('#0000ff')
+                new_brush_color = QColor('#ffff00')
                 # print("new color: ", new_brush_color.name())
                 new_brush_color.setAlpha(25)       
                 # Set the brush color
@@ -395,14 +421,16 @@ class MyMainWindow(QMainWindow):
         # Get the current values of the region
         region_values = region_item.getRegion()
         # Calculate the relative label position
-        label_x = region_values[0] # + (region_values[1] - region_values[0]) / 2
+        label_x, label_y = region_values # + (region_values[1] - region_values[0]) / 2
         print("region value[0]: ", label_x)
         # Update the text item text and position
         text_item.setText(f"{var}\n{prob}")
         # Set the text color
         text_item.setColor(pg.mkColor('blue'))
         text_item.setFont(pg.QtGui.QFont("Arial", 15))
-        text_item.setPos(label_x, 1)
+        print("lable_x: ", label_x)
+        print("lable_y: ", label_y)
+        text_item.setPos(label_x, 35569)
 
         # region_item.setColor(pg.mkColor('red'))
 
@@ -418,6 +446,7 @@ class MyMainWindow(QMainWindow):
         # file['start_time'] = file['start_time'].astype(float)
         file['start_time'] = file['start_time'].astype(float)
         file['end_time'] = file['end_time'].astype(float)
+        file['prob'] = file['prob'].astype(float).round(2)
         print("start time \t end time \n", file['start_time'], " \t", file['end_time'])
         print("pandas file after mod: \n", file)
         zipp = zip(file['start_time'], file['end_time'], file['syllable'], file['prob'])
@@ -426,17 +455,19 @@ class MyMainWindow(QMainWindow):
         avg_prob = file['prob'].mean()
         print("average prob: ", avg_prob)
         for cell in cells:
-            if cell.prob < avg_prob:
-                color = QtGui.QColor(255, 0, 0, 25)
-                region_item = LinearRegionItem(values=(cell.st, cell.et,cell.var, cell.prob),orientation=pg.LinearRegionItem.Vertical, pen=pg.mkPen(color='k', width=1.5), brush=pg.mkBrush(color), swapMode='block')
-            else:
+            if cell.prob > avg_prob:
                 color = QtGui.QColor(0, 255, 0, 25)
                 region_item = LinearRegionItem(values=(cell.st, cell.et,cell.var, cell.prob),orientation=pg.LinearRegionItem.Vertical, pen=pg.mkPen(color='k', width=1.5), movable=False, brush=pg.mkBrush(color), swapMode='block')
+            else:
+                color = QtGui.QColor(255, 0, 0, 25)
+                region_item = LinearRegionItem(values=(cell.st, cell.et,cell.var, cell.prob),orientation=pg.LinearRegionItem.Vertical, pen=pg.mkPen(color='k', width=1.5), brush=pg.mkBrush(color), swapMode='block')
             self.region_items.append(region_item)
             print("appending to region_lst")
             self.region_lst.append([index, [cell.st, cell.et, cell.var, cell.prob]])
             # print("region item after appending: \n", self.region_lst)
+            self.plot_item2.addItem(region_item)
             self.plot_item.addItem(region_item)
+            # self.plot_item2.addItem(region_item)
             border_color = QtGui.QColor(255, 0, 0, 100)  # Red border
             # fill_color = QtGui.QColor(0, 255, 0, 100)  # Green fill with alpha value 100
             text_item = pg.TextItem(text=f"{cell.var}\n{cell.prob}", border=border_color, anchor=(0, 0))
@@ -446,7 +477,7 @@ class MyMainWindow(QMainWindow):
 
             # Set the position of the text item to match the position of the region item
             print("region_bounding_rect.x(), region_bounding_rect.y(): ", region_bounding_rect.x(), region_bounding_rect.y())
-            text_item.setPos(region_bounding_rect.x(), region_bounding_rect.y())
+            text_item.setPos(region_bounding_rect.x(),region_bounding_rect.y() - text_item.boundingRect().height())
 
             # Add the text item to the plot widget
             self.plot_item.addItem(text_item)
@@ -461,12 +492,12 @@ class MyMainWindow(QMainWindow):
             self.connect_region_signals(region_item, text_item, cell.var, cell.prob)
             self.handle_label_update(region_item, text_item, cell.var, cell.prob)
 
-        self.plot_item.setLabel("bottom", text="Time")
+        # self.plot_item.setLabel("bottom", text="Time")
         # self.plot_item.getPlotItem().getAxis("bottom").orientation = 'top'
-        self.plot_item.getAxis("bottom").setVisible(True)
-        self.plot_item.getAxis("left").setVisible(True)
-        self.plot_item.setXRange(cells[0].st, cells[-1].et)
-        self.plot_item2.setXRange(cells[0].st, cells[-1].et)
+        # self.plot_item.getAxis("bottom").setVisible(True)
+        # self.plot_item.getAxis("left").setVisible(True)
+        # self.plot_item.setYRange(cells[0].st, cells[-1].et)
+        # self.plot_item2.setXRange(cells[0].st, cells[-1].et)
         # self.text_items = text_items
         # self.region_items = region_items
         print("region item before \n", self.region_items)
@@ -544,11 +575,11 @@ class MyMainWindow(QMainWindow):
     def plot_graph(self, layout_widget, path):
         # Open the audio file and extract data
         # layout = 
-        viewBox = pg.ViewBox()
-        self.plot_item2 = pg.PlotItem(viewBox=viewBox)
+        # viewBox = pg.ViewBox()
+        
 
         # Add plot_item2 to the layout
-        self.layout_widget.addItem(self.plot_item2, 1, 0, 1, 1)
+        # self.layout_widget.addItem(self.plot_item2, 1, 0, 1, 1)
 
         wave_obj = wave.open(path, 'rb')
         sample_width = wave_obj.getsampwidth()
@@ -577,7 +608,7 @@ class MyMainWindow(QMainWindow):
         # Update the curve with the initial audio data
         print("time: ", len(time))
         print("amplitude: ", len(amplitude))
-        self.curve.setData(time, amplitude)
+        # self.curve.setData(time, amplitude)
 
         # Compute spectrogram
         n_fft = 2048  # FFT window size
@@ -586,32 +617,61 @@ class MyMainWindow(QMainWindow):
         spec = librosa.amplitude_to_db(np.abs(D), ref=np.max)
         # Transpose the spectrogram
         spec = spec.T
+        # Rescale the spectrogram data to span from -1 to +1 range
+        max_spec = np.max(spec)
+        min_spec = np.min(spec)
+        scaled_spec = ((spec - min_spec) / (max_spec - min_spec)) * 2 - 1
         # Adjust time axis
         time_resolution = hop_length / sample_rate
         time_axis = np.arange(0, audio_duration, time_resolution)
 
         # Plot spectrogram
-        img = pg.ImageItem(spec)
-        self.plot_item2.addItem(img)
+        img = pg.ImageItem(scaled_spec)
+
+
+        # Set the y-axis range of the spectrogram plot to span from -1 to +1
+        self.plot_item2.setYRange(-1, 1)
         img.setRect(0, 0, audio_duration * 1e7, sample_rate / 2)
         # Set gray_r colormap
         cmap = pg.ColorMap([0, 255], [(255, 255, 255), (0, 0, 0)])
         lut = cmap.getLookupTable(0, 255, 256)
         img.setLookupTable(lut)
+        # Convert the image to a QPixmap and then to a QImage with the desired resolution
+        image_width = 1920 * 4
+        image_height = 1080 * 4
+        pixmap = QPixmap(image_width, image_height)
+        pixmap.fill(Qt.transparent)  # Fill with a transparent background
+        painter = QPainter(pixmap)
+        img.paint(painter, QRectF(0, 0, image_width, image_height))
+        painter.end()
+        qimage = pixmap.toImage()
 
-        # Set labels and axis ranges
-        self.plot_item2.setLabel('left', 'Frequency', units='Hz')
-        self.plot_item2.setLabel('bottom', 'Time', units='s')
-        # self.plot_item.setXRange(0, audio_duration)
-        # self.plot_item.setYRange(0, sample_rate / 2)
+        # Convert QImage to NumPy array
+        qimage = qimage.rgbSwapped()  # Convert to RGB format
+        image_array = np.array(qimage.bits().asarray(qimage.width() * qimage.height() * 4)).reshape((qimage.height(), qimage.width(), 4))
+        # Transpose the image array to display vertically
+        image_array = np.transpose(image_array, (1, 0, 2))
+
+        # Set the image data for the ImageItem
+        img.setImage(image_array)
+
+        # Add the ImageItem to the plot
+        self.plot_item2.addItem(img)
+        # Increase the size of the plot_item2's viewport
+        self.plot_item2.getViewBox().setFixedWidth(1920 * 16)  # Adjust size as needed
+        max_amplitude = max(max(amplitude), -min(amplitude))
+        # Rescale each amplitude value individually to fit within the new y-axis range
+        rescaled_amplitude = [(a / max_amplitude) * (sample_rate / 2) for a in amplitude]
+        # Plot the rescaled waveform data
+        self.curve.setData(time, rescaled_amplitude, pen='r')
         self.plot_item2.setXRange(0, audio_duration)
         self.plot_item2.setYRange(0, sample_rate / 2)
-        self.curve.setData(time, amplitude)
+
     def resizeEvent(self, event):
         # Resize the plot widget along with the central widget
         new_size = event.size()
-        self.plot_item.setGeometry(0, 0, new_size.width(), 1050)
-        self.plot_item2.setGeometry(0, 0, new_size.width(), 1050)
+        self.plot_item.setGeometry(0, 0, new_size.width(), 600)
+        self.plot_item2.setGeometry(0, 0, new_size.width(), 600)
         event.accept()
 
 def run_app():
