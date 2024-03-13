@@ -4,9 +4,17 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from PyQt5.QtCore import QRectF
+from pyqtgraph.Qt import QtCore
 import librosa
 import librosa.display
+import pyqtgraph.opengl as gl
 from pyqtgraph import QtGui
+from PyQt5.QtGui import QFont
+from pyqtgraph import ColorMap
+import pyqtgraph as pg
+from pyqtgraph.Qt import QtCore
+from pyqtgraph.opengl import GLMeshItem, MeshData
+from pyqtgraph.widgets.GradientWidget import GradientWidget
 from PyQt5.QtWidgets import QGraphicsScene
 from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog
 from PyQt5.QtGui import QPixmap, QImage, QPainter
@@ -147,7 +155,7 @@ class MyMainWindow(QMainWindow):
         # proxy.addItem(self.plot_item)
         # Set contents margins to zero
         
-        p1 = self.layout_widget.addItem(self.plot_item, 0, 0, 1, 1)
+        self.layout_widget.addItem(self.plot_item)
 
        
         # Remove spacing between plots
@@ -163,15 +171,15 @@ class MyMainWindow(QMainWindow):
         # Set contents margins to zero
         # self.viewbox.invertY(True)  # Set to True to invert the y-axis
 
-        p2 = self.layout_widget.addItem(self.plot_item2, 1, 0, 1, 1)
-        self.plot_item2.setYLink(self.plot_item)
-        self.plot_item2.setXLink(self.plot_item)
+        self.layout_widget.addItem(self.plot_item2)
+        # self.plot_item2.setYLink(self.plot_item)
+        # self.plot_item2.setXLink(self.plot_item)
         # Hide the x-axis ticks
         self.plot_item.getAxis("bottom").setTicks([])
         
         # Optionally, hide the x-axis label as well
         self.plot_item.getAxis("bottom").setLabel("")
-        # self.plot_item.getAxis("left").setTicks([])
+        self.plot_item.getAxis("left").setTicks([])
         
         # Optionally, hide the x-axis label as well
         self.plot_item.getAxis("left").setLabel("Amplitude")
@@ -179,14 +187,16 @@ class MyMainWindow(QMainWindow):
         
         # Optionally, hide the x-axis label as well
         self.plot_item2.getAxis("left").setLabel("Frequency")
+        self.plot_item2.getAxis("bottom").setLabel("Time")
         # Hide the axes of the second plot item
         # self.plot_item.getAxis('left').setVisible(False)
         # self.plot_item.getAxis('bottom').setVisible(False)
         # print("p1: ", len(p1))
         # print("p2: ", len(p2))
-        if p1 is not None and p2 is not None:
-            print("linking is working")
-            p1.setYLink(p2)
+        # Removed the linking for the demo
+        # if p1 is not None and p2 is not None:
+        #     print("linking is working")
+        #     p1.setYLink(p2)
         # Add the ViewBox to the layout
 
         # p2.setYLink('Plot1')  ## test linking by name
@@ -194,7 +204,7 @@ class MyMainWindow(QMainWindow):
         # max_width = scene.sceneRect().width()
         # max_height = scene.sceneRect().height()
         # self.layout_widget.addItem(self.viewbox)
-        self.layout_widget.setGeometry(0, 0, 1500, 800)
+        self.layout_widget.setGeometry(0, 0, 950, 770)
         # Scale the layout widget to ensure high-resolution rendering
 
         self.layout_widget.scale(16, 16)  # Increase scale factor as needed for higher resolution
@@ -202,6 +212,7 @@ class MyMainWindow(QMainWindow):
         scene.addWidget(self.layout_widget)
 
         self.ui.graphicsView.setScene(scene)
+        self.ui.graphicsView.scale(1, 1)
         # self.layout_widget.addItem(self.plot_item)
         self.start = 0
         self.end = 0
@@ -257,7 +268,7 @@ class MyMainWindow(QMainWindow):
         file_dialog.setNameFilter("Audio Files (*.wav *.mp3 *.ogg)")
         if file_dialog.exec_():
             file_path = file_dialog.selectedFiles()[0]
-            self.plot_graph(self.layout_widget ,file_path)
+            self.plot_graph(file_path)
 
     def load_csv_file(self):
         file_dialog = QFileDialog()
@@ -353,7 +364,7 @@ class MyMainWindow(QMainWindow):
                 # print("new color: ", new_brush_color.name())
                 new_brush_color.setAlpha(25)       
                 # Set the brush color
-                next_region_item.setBrush(new_brush_color)
+                # previous_region_item.setBrush(new_brush_color)
                 current_region_item.setBrush(new_brush_color)
                 # print("Brush color after setting: ", previous_region_item.brush.color().name())  # Debugging
 
@@ -427,10 +438,10 @@ class MyMainWindow(QMainWindow):
         text_item.setText(f"{var}\n{prob}")
         # Set the text color
         text_item.setColor(pg.mkColor('blue'))
-        text_item.setFont(pg.QtGui.QFont("Arial", 15))
+        text_item.setFont(pg.QtGui.QFont("Arial", 20))
         print("lable_x: ", label_x)
         print("lable_y: ", label_y)
-        text_item.setPos(label_x, 35569)
+        text_item.setPos(label_x, 35000)
 
         # region_item.setColor(pg.mkColor('red'))
 
@@ -446,7 +457,7 @@ class MyMainWindow(QMainWindow):
         # file['start_time'] = file['start_time'].astype(float)
         file['start_time'] = file['start_time'].astype(float)
         file['end_time'] = file['end_time'].astype(float)
-        file['prob'] = file['prob'].astype(float).round(2)
+        file['prob'] = file['prob'].astype(float).round(1)
         print("start time \t end time \n", file['start_time'], " \t", file['end_time'])
         print("pandas file after mod: \n", file)
         zipp = zip(file['start_time'], file['end_time'], file['syllable'], file['prob'])
@@ -465,15 +476,19 @@ class MyMainWindow(QMainWindow):
             print("appending to region_lst")
             self.region_lst.append([index, [cell.st, cell.et, cell.var, cell.prob]])
             # print("region item after appending: \n", self.region_lst)
-            self.plot_item2.addItem(region_item)
+
             self.plot_item.addItem(region_item)
+
             # self.plot_item2.addItem(region_item)
             border_color = QtGui.QColor(255, 0, 0, 100)  # Red border
-            # fill_color = QtGui.QColor(0, 255, 0, 100)  # Green fill with alpha value 100
-            text_item = pg.TextItem(text=f"{cell.var}\n{cell.prob}", border=border_color, anchor=(0, 0))
+            fill_color = QtGui.QColor(240, 240, 240, 255)  # Green fill with alpha value 100
+            text_item = pg.TextItem(text=f"{cell.var}\n{cell.prob}", border=border_color, fill=fill_color)
+            # text_item.setTextWidth(2)  # Set the font size (adjust the value as needed)
+            # Set the font for the TextItem
             # Get the bounding rectangle of the region item
             # Get the bounding rectangle of the region item
             region_bounding_rect = region_item.boundingRect()
+
 
             # Set the position of the text item to match the position of the region item
             print("region_bounding_rect.x(), region_bounding_rect.y(): ", region_bounding_rect.x(), region_bounding_rect.y())
@@ -572,7 +587,7 @@ class MyMainWindow(QMainWindow):
         self.ui.lineEdit_4.clear()
         self.ui.lineEdit_5.clear()
 
-    def plot_graph(self, layout_widget, path):
+    def plot_graph(self, path):
         # Open the audio file and extract data
         # layout = 
         # viewBox = pg.ViewBox()
@@ -593,7 +608,7 @@ class MyMainWindow(QMainWindow):
         # Read the entire audio waveform
         audio_frames = wave_obj.readframes(num_frames)
         audio_data = np.frombuffer(audio_frames, dtype=np.int16) / float(2 ** (8 * sample_width - 1))
-        #print("audio data \n", audio_data.tolist())
+        print("audio data \n", audio_data.tolist())
         self.audio_data = audio_data.tolist()
         # Plot the audio waveform horizontally
         # Plot the audio waveform horizontally
@@ -611,30 +626,56 @@ class MyMainWindow(QMainWindow):
         # self.curve.setData(time, amplitude)
 
         # Compute spectrogram
-        n_fft = 2048  # FFT window size
-        hop_length = 256  # Hop length (frame shift)
+        # Correctly plotting the spectrogram without much pixelation
+        n_fft = 64 # FFT window size
+        hop_length = 16 # Hop length (frame shift)
         D = librosa.stft(audio_data, n_fft=n_fft, hop_length=hop_length)
+        # Magnitude Details
         spec = librosa.amplitude_to_db(np.abs(D), ref=np.max)
+        # spec = np.random.rand(10, 10)  # Example 10x10 spectrogram array
+        # print("spec: \n", spec)
+        # print("size of spec: ", spec.size)
+        # path_op = "/home/krupa/Documents/Krupavathy/spec.txt"
+        # with open(path_op, 'w') as f:
+        #     f.write(str(spec))
+
+        # spec = np.random.rand(10, 10)  # Example 10x10 spectrogram array
         # Transpose the spectrogram
         spec = spec.T
+        # Create a mesh plot to display the spectrogram
+        # Define colormap
+        # Create a GLGradientWidget
+        # Assuming spec is your spectrogram array
+        # Create a GLGradientWidget
+        # Create a GradientWidget
+        # Create a GradientWidget with horizontal orientation
+        # Create a GradientWidget with horizontal orientation
+        # Add the mesh plot to your PlotItem
+        # Add mesh item to the plot
+        # plot_window.addItem(mesh_item)
+        # Add the mesh plot to your PlotItem
+        # self.plot_item2.addItem(mesh_item)
+
         # Rescale the spectrogram data to span from -1 to +1 range
         max_spec = np.max(spec)
         min_spec = np.min(spec)
         scaled_spec = ((spec - min_spec) / (max_spec - min_spec)) * 2 - 1
+
         # Adjust time axis
         time_resolution = hop_length / sample_rate
         time_axis = np.arange(0, audio_duration, time_resolution)
 
-        # Plot spectrogram
+        # # Plot spectrogram
         img = pg.ImageItem(scaled_spec)
 
 
         # Set the y-axis range of the spectrogram plot to span from -1 to +1
         self.plot_item2.setYRange(-1, 1)
         img.setRect(0, 0, audio_duration * 1e7, sample_rate / 2)
-        # Set gray_r colormap
-        cmap = pg.ColorMap([0, 255], [(255, 255, 255), (0, 0, 0)])
-        lut = cmap.getLookupTable(0, 255, 256)
+        # Generate a lookup table (lut) using Viridis colormap
+        cmap = plt.get_cmap('YlGnBu')
+        lut = (cmap(np.linspace(0, 1, 256)) * 255).astype(np.uint8)
+
         img.setLookupTable(lut)
         # Convert the image to a QPixmap and then to a QImage with the desired resolution
         image_width = 1920 * 4
@@ -652,26 +693,26 @@ class MyMainWindow(QMainWindow):
         # Transpose the image array to display vertically
         image_array = np.transpose(image_array, (1, 0, 2))
 
-        # Set the image data for the ImageItem
+        # # Set the image data for the ImageItem
         img.setImage(image_array)
 
-        # Add the ImageItem to the plot
+        # # Add the ImageItem to the plot
         self.plot_item2.addItem(img)
-        # Increase the size of the plot_item2's viewport
-        self.plot_item2.getViewBox().setFixedWidth(1920 * 16)  # Adjust size as needed
+        # # Increase the size of the plot_item2's viewport
+        # self.plot_item2.getViewBox().setFixedWidth(1920 * 16)  # Adjust size as needed
         max_amplitude = max(max(amplitude), -min(amplitude))
-        # Rescale each amplitude value individually to fit within the new y-axis range
+        # # Rescale each amplitude value individually to fit within the new y-axis range
         rescaled_amplitude = [(a / max_amplitude) * (sample_rate / 2) for a in amplitude]
-        # Plot the rescaled waveform data
+        # # Plot the rescaled waveform data
         self.curve.setData(time, rescaled_amplitude, pen='r')
         self.plot_item2.setXRange(0, audio_duration)
-        self.plot_item2.setYRange(0, sample_rate / 2)
+        self.plot_item2.setYRange(0, (sample_rate / 2) - 12000)
 
     def resizeEvent(self, event):
         # Resize the plot widget along with the central widget
         new_size = event.size()
-        self.plot_item.setGeometry(0, 0, new_size.width(), 600)
-        self.plot_item2.setGeometry(0, 0, new_size.width(), 600)
+        self.plot_item.setGeometry(0, 0, new_size.width(), 400)
+        self.plot_item2.setGeometry(0, 0, new_size.width(), 400)
         event.accept()
 
 def run_app():
