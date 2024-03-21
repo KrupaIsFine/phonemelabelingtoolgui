@@ -1,5 +1,6 @@
 import sys
 import wave
+import csv
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -7,6 +8,8 @@ from PyQt5.QtCore import QRectF
 from pyqtgraph.Qt import QtCore
 import librosa
 import librosa.display
+from pydub import AudioSegment
+from pydub.playback import play
 import pyqtgraph.opengl as gl
 from pyqtgraph import QtGui
 from PyQt5.QtGui import QFont
@@ -136,13 +139,13 @@ class MyMainWindow(QMainWindow):
         # self.spectrogram_plot.setLabel("bottom", text="Time(s)")
         # self.spectrogram_plot.setLabel("left", text="Frequency (Hz)")
         # self.spectrogram_plot.setGeometry(0, 0, self.width(), 250)  # Adjust size and position as needed
-
+        self.viewbox = pg.ViewBox()
+        self.viewbox2 = pg.ViewBox()
         self.plot_item = pg.PlotItem() 
                 # Set the range for the x-axis
         # self.plot_item.setXRange(0, 1)
         # Create a ViewBox
-        self.viewbox = pg.ViewBox()
-        self.viewbox2 = pg.ViewBox()
+
         # Set the range for the y-axis
         # self.plot_item.setYRange(0, 1)
         self.plot_item2 = pg.PlotItem() # Set a white background
@@ -154,8 +157,9 @@ class MyMainWindow(QMainWindow):
         # proxy = QGraphicsProxyWidget()
         # proxy.addItem(self.plot_item)
         # Set contents margins to zero
-        
-        self.layout_widget.addItem(self.plot_item)
+        # Set border around the layout widget
+        self.layout_widget.setStyleSheet("border: 1px solid black;")
+        p1 = self.layout_widget.addItem(self.plot_item)
 
        
         # Remove spacing between plots
@@ -171,19 +175,20 @@ class MyMainWindow(QMainWindow):
         # Set contents margins to zero
         # self.viewbox.invertY(True)  # Set to True to invert the y-axis
 
-        self.layout_widget.addItem(self.plot_item2)
-        # self.plot_item2.setYLink(self.plot_item)
-        # self.plot_item2.setXLink(self.plot_item)
+        p2 = self.layout_widget.addItem(self.plot_item2)
+        # self.plot_item2.setContentsMargins(0, 0, 0, 0)
+        self.plot_item2.setYLink(self.plot_item)
+        self.plot_item2.setXLink(self.plot_item)
         # Hide the x-axis ticks
         self.plot_item.getAxis("bottom").setTicks([])
         
         # Optionally, hide the x-axis label as well
         self.plot_item.getAxis("bottom").setLabel("")
-        self.plot_item.getAxis("left").setTicks([])
+        # self.plot_item.getAxis("left").setTicks([])
         
         # Optionally, hide the x-axis label as well
         self.plot_item.getAxis("left").setLabel("Amplitude")
-        self.plot_item2.getAxis("left").setTicks([])
+        # self.plot_item2.getAxis("left").setTicks([])
         
         # Optionally, hide the x-axis label as well
         self.plot_item2.getAxis("left").setLabel("Frequency")
@@ -194,9 +199,9 @@ class MyMainWindow(QMainWindow):
         # print("p1: ", len(p1))
         # print("p2: ", len(p2))
         # Removed the linking for the demo
-        # if p1 is not None and p2 is not None:
-        #     print("linking is working")
-        #     p1.setYLink(p2)
+        if p1 is not None and p2 is not None:
+            print("linking is working")
+            p2.setYLink(p1)
         # Add the ViewBox to the layout
 
         # p2.setYLink('Plot1')  ## test linking by name
@@ -204,21 +209,26 @@ class MyMainWindow(QMainWindow):
         # max_width = scene.sceneRect().width()
         # max_height = scene.sceneRect().height()
         # self.layout_widget.addItem(self.viewbox)
-        self.layout_widget.setGeometry(0, 0, 950, 770)
+        # Set the size policy for the layout widget to expand and fill the available space
+        self.layout_widget.setSizePolicy(
+            pg.QtWidgets.QSizePolicy.Expanding,
+            pg.QtWidgets.QSizePolicy.Expanding
+        )
+        self.layout_widget.setGeometry(0, 0, 1700, 770)
         # Scale the layout widget to ensure high-resolution rendering
 
-        self.layout_widget.scale(16, 16)  # Increase scale factor as needed for higher resolution
+        # self.layout_widget.scale(16, 16)  # Increase scale factor as needed for higher resolution
 
         scene.addWidget(self.layout_widget)
-
+        scene.setSceneRect(scene.itemsBoundingRect())
         self.ui.graphicsView.setScene(scene)
-        self.ui.graphicsView.scale(1, 1)
+
         # self.layout_widget.addItem(self.plot_item)
         self.start = 0
         self.end = 0
         self.sample_rate = 0
         self.audio_data = []
-
+        self.audio = None
         # Initialize curve
         self.curve = None
         self.region_items = []
@@ -240,6 +250,16 @@ class MyMainWindow(QMainWindow):
         self.changed_time = {}
         #self.changed_fss = {}
 
+        # Connect the sceneRectChanged signal of the scene to adjust the layout widget's size
+        scene.sceneRectChanged.connect(self.adjustLayoutWidgetSize)
+
+    def adjustLayoutWidgetSize(self, rect):
+        # Resize the plot widget along with the central widget
+        self.plot_item.setGeometry(rect.toRect())
+        self.plot_item2.setGeometry(rect.toRect())
+        # Adjust the size of the layout widget to fit the scene's bounding rect
+        self.layout_widget.setGeometry(rect.toRect())
+        self.setGeometry(rect.toRect())
     def process_input_values(self):
         # Get text from the QLineEdit widgets
         start_time_text = self.ui.lineEdit_6.text()
@@ -296,6 +316,7 @@ class MyMainWindow(QMainWindow):
         file_dialog.setNameFilter("CSV Files (*.csv)")
         if file_dialog.exec_():
             file_path = file_dialog.selectedFiles()[0]
+            # Use below line if you want to export with decimal values, change the datatype to float above too
             # float_formats = {'start_time': '%.5f', 'end_time': '%.5f'}
             df.to_csv(file_path, index=False)
             print(f"Changes saved to {file_path}")
@@ -320,19 +341,21 @@ class MyMainWindow(QMainWindow):
         file_dialog.setNameFilter("LAB Files (*.lab)")
         if file_dialog.exec_():
             file_path = file_dialog.selectedFiles()[0]
+            # Use below line if you want to export with decimal values, change the datatype to float above too
             # float_formats = {'start_time': '%.5f'}
             df.to_csv(file_path, sep=' ', index=False, header=False)
             print(f"Changes saved to {file_path}")
             # Clear the dictionary after saving changes
             #dct_obj.clear()
 
-    def connect_region_signals(self, region_item, text_item, var, prob):
+    def connect_region_signals(self, region_item, region_item2, text_item, var, prob):
         start_time, end_time = region_item.getRegion()
         print("region item: ", region_item.getRegion())
         print("st: ", start_time)
         print("et: ", end_time)
         print("region_item.sigRegionChanged.connect(lambda: self.handle_label_update(region_item, text_item, var, prob))")
         # Connect signals when the clickable_region_item's clicked signal is successfully connected
+        region_item.sigRegionChanged.connect(lambda: self.sync_region_items(region_item, region_item2))
         region_item.sigRegionChanged.connect(lambda: self.handle_label_update(region_item, text_item, var, prob))
         print("region_item.sigRegionChanged.connect(lambda: self.update_changed_time(var, prob, region_item.getRegion()))")
         region_item.sigRegionChanged.connect(lambda: self.update_changed_time(var, prob, region_item.getRegion()))
@@ -423,6 +446,7 @@ class MyMainWindow(QMainWindow):
         if self.curve is not None:
             self.plot_item.removeItem(self.curve)
             self.curve = None
+        self.plot_item2.clear()
         # Clear changed data dictionaries
         self.changed_time = {}
         self.plot_item.update()
@@ -444,6 +468,15 @@ class MyMainWindow(QMainWindow):
         text_item.setPos(label_x, 35000)
 
         # region_item.setColor(pg.mkColor('red'))
+
+    def sync_region_items(self, source_region_item, target_region_item):
+        # Synchronize region boundaries
+        st, et = source_region_item.getRegion()
+        # st_1, et_1 = target_region_item.getRegion()
+        print("before syncing")
+        target_region_item.setBrush(pg.mkColor(0, 0, 0, 0))    
+        target_region_item.setRegion([st, et])
+        print("after syncing")
 
     def plot_data(self, path):
         column_names = ['start_time', 'end_time', 'syllable', 'prob']
@@ -469,16 +502,18 @@ class MyMainWindow(QMainWindow):
             if cell.prob > avg_prob:
                 color = QtGui.QColor(0, 255, 0, 25)
                 region_item = LinearRegionItem(values=(cell.st, cell.et,cell.var, cell.prob),orientation=pg.LinearRegionItem.Vertical, pen=pg.mkPen(color='k', width=1.5), movable=False, brush=pg.mkBrush(color), swapMode='block')
+                region_item2 = LinearRegionItem(values=(cell.st, cell.et,cell.var, cell.prob),orientation=pg.LinearRegionItem.Vertical, pen=pg.mkPen(color='k', width=1.5), movable=False, brush=pg.mkColor(0, 0, 0, 0), swapMode='block')
             else:
                 color = QtGui.QColor(255, 0, 0, 25)
                 region_item = LinearRegionItem(values=(cell.st, cell.et,cell.var, cell.prob),orientation=pg.LinearRegionItem.Vertical, pen=pg.mkPen(color='k', width=1.5), brush=pg.mkBrush(color), swapMode='block')
+                region_item2 = LinearRegionItem(values=(cell.st, cell.et,cell.var, cell.prob),orientation=pg.LinearRegionItem.Vertical, pen=pg.mkPen(color='k', width=1.5), brush=pg.mkColor(0, 0, 0, 0), swapMode='block')            
             self.region_items.append(region_item)
             print("appending to region_lst")
             self.region_lst.append([index, [cell.st, cell.et, cell.var, cell.prob]])
             # print("region item after appending: \n", self.region_lst)
 
             self.plot_item.addItem(region_item)
-
+            self.plot_item2.addItem(region_item2)
             # self.plot_item2.addItem(region_item)
             border_color = QtGui.QColor(255, 0, 0, 100)  # Red border
             fill_color = QtGui.QColor(240, 240, 240, 255)  # Green fill with alpha value 100
@@ -496,15 +531,17 @@ class MyMainWindow(QMainWindow):
 
             # Add the text item to the plot widget
             self.plot_item.addItem(text_item)
-
             # Append the text item to the list of text items
             self.text_items.append(text_item)
             print("main region item:", region_item)
             index += 1
+            
             # Connect the clicked signal of the region item to a slot
             region_item.clicked.connect(self.display_clicked_values)
+            # Connect sigRegionChanged signals of both region items
+            # region_item2.sigRegionChanged.connect(lambda: self.sync_region_items(region_item2, region_item))
             # Connect other signals and perform necessary setup
-            self.connect_region_signals(region_item, text_item, cell.var, cell.prob)
+            self.connect_region_signals(region_item, region_item2, text_item, cell.var, cell.prob)
             self.handle_label_update(region_item, text_item, cell.var, cell.prob)
 
         # self.plot_item.setLabel("bottom", text="Time")
@@ -520,6 +557,8 @@ class MyMainWindow(QMainWindow):
         print("region item after \n", self.region_items)
         # Connect the start_time_changed signal to a function or lambda expression
 
+
+
     def play_audio(self):
         start_time = self.start
         end_time = self.end
@@ -527,21 +566,30 @@ class MyMainWindow(QMainWindow):
         self.audio_playing = True
         print("Start Time:", start_time)
         print("End Time:", end_time)
+        start = start_time / 1e7
+        end = end_time / 1e7
+        print("start: ", start)
+        print("end: ", end)
         # Calculate start and end indices based on time
         start_index = int((start_time / 1e7) * self.sample_rate)
         end_index = int((end_time / 1e7) * self.sample_rate)
         print("start index:", start_index)
         print("end index:", end_index)
         # Extract audio data within the specified start and end time
-        audio_segment = self.audio_data[start_index:end_index]
-        print("audio segment: \n", audio_segment)
-        # Increase buffer size to reduce underruns
-        blocksize = 2048  # Experiment with different values to find the optimal buffer size
-        print("Sample Rate:", self.sample_rate)
+        audio_segment = self.audio_data[int(start_index):int(end_index)]
+        print("length of audio data: ", len(self.audio_data))
+        print("length of audio: ", len(self.audio))
+        # # print("audio segment: \n", audio_segment)
+        # # Increase buffer size to reduce underruns
+        # blocksize = 2048  # Experiment with different values to find the optimal buffer size
+        # print("Sample Rate:", self.sample_rate)
+        # print("Frames:", self.sample_rate)
         # Start audio playback
-        sd.play(audio_segment, samplerate=self.sample_rate, blocksize=blocksize)
-        sd.wait()  # Wait until playback is finished
+        # sd.play(audio_segment, samplerate=self.sample_rate, blocksize=blocksize)
+        # sd.wait()  # Wait until playback is finished
         # Set the flag to indicate that audio playback has finished
+        play(audio_segment)
+        print("audio finished")
         self.audio_playing = False
 
     def create_region_item(self, start_time, end_time, syllable, prob):
@@ -597,6 +645,8 @@ class MyMainWindow(QMainWindow):
         # self.layout_widget.addItem(self.plot_item2, 1, 0, 1, 1)
 
         wave_obj = wave.open(path, 'rb')
+        audio = AudioSegment.from_file(path)
+        self.audio = audio
         sample_width = wave_obj.getsampwidth()
         num_frames = wave_obj.getnframes()
         # Get the sample rate
@@ -623,54 +673,40 @@ class MyMainWindow(QMainWindow):
         # Update the curve with the initial audio data
         print("time: ", len(time))
         print("amplitude: ", len(amplitude))
+        print("amplitude: \n", amplitude)
+        
+        # Path to the output file
+        file_path = "/home/krupa/Documents/Krupavathy/amplitude_data.csv"
+        with open(file_path, mode='w', newline='') as file:
+            for item in amplitude:
+                file.write(str(item) + '\n')
         # self.curve.setData(time, amplitude)
 
         # Compute spectrogram
         # Correctly plotting the spectrogram without much pixelation
-        n_fft = 64 # FFT window size
-        hop_length = 16 # Hop length (frame shift)
+        n_fft = 512 # FFT window size crct - 64
+        hop_length = 64 # Hop length (frame shift) crct - 16
         D = librosa.stft(audio_data, n_fft=n_fft, hop_length=hop_length)
-        # Magnitude Details
+        # # Magnitude Details
         spec = librosa.amplitude_to_db(np.abs(D), ref=np.max)
-        # spec = np.random.rand(10, 10)  # Example 10x10 spectrogram array
-        # print("spec: \n", spec)
-        # print("size of spec: ", spec.size)
-        # path_op = "/home/krupa/Documents/Krupavathy/spec.txt"
-        # with open(path_op, 'w') as f:
-        #     f.write(str(spec))
-
-        # spec = np.random.rand(10, 10)  # Example 10x10 spectrogram array
+        file_path = "/home/krupa/Documents/Krupavathy/spectrogram_data.csv"
+        with open(file_path, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerows(spec)
+        print("spectrogram: \n", spec)
+        print("spectrogram before: ", len(spec))
         # Transpose the spectrogram
         spec = spec.T
-        # Create a mesh plot to display the spectrogram
-        # Define colormap
-        # Create a GLGradientWidget
-        # Assuming spec is your spectrogram array
-        # Create a GLGradientWidget
-        # Create a GradientWidget
-        # Create a GradientWidget with horizontal orientation
-        # Create a GradientWidget with horizontal orientation
-        # Add the mesh plot to your PlotItem
-        # Add mesh item to the plot
-        # plot_window.addItem(mesh_item)
-        # Add the mesh plot to your PlotItem
-        # self.plot_item2.addItem(mesh_item)
-
-        # Rescale the spectrogram data to span from -1 to +1 range
-        max_spec = np.max(spec)
-        min_spec = np.min(spec)
-        scaled_spec = ((spec - min_spec) / (max_spec - min_spec)) * 2 - 1
-
+        print("spectrogram: ", len(spec))
         # Adjust time axis
-        time_resolution = hop_length / sample_rate
-        time_axis = np.arange(0, audio_duration, time_resolution)
+        # time_resolution = hop_length / sample_rate
+        # time_axis = np.arange(0, audio_duration, time_resolution)
 
         # # Plot spectrogram
-        img = pg.ImageItem(scaled_spec)
-
+        img = pg.ImageItem(spec)
 
         # Set the y-axis range of the spectrogram plot to span from -1 to +1
-        self.plot_item2.setYRange(-1, 1)
+        # self.plot_item2.setYRange(-1, 1)
         img.setRect(0, 0, audio_duration * 1e7, sample_rate / 2)
         # Generate a lookup table (lut) using Viridis colormap
         cmap = plt.get_cmap('YlGnBu')
@@ -698,12 +734,12 @@ class MyMainWindow(QMainWindow):
 
         # # Add the ImageItem to the plot
         self.plot_item2.addItem(img)
-        # # Increase the size of the plot_item2's viewport
-        # self.plot_item2.getViewBox().setFixedWidth(1920 * 16)  # Adjust size as needed
+        # # # Increase the size of the plot_item2's viewport
+        # # self.plot_item2.getViewBox().setFixedWidth(1920 * 16)  # Adjust size as needed
         max_amplitude = max(max(amplitude), -min(amplitude))
-        # # Rescale each amplitude value individually to fit within the new y-axis range
+        # # # Rescale each amplitude value individually to fit within the new y-axis range
         rescaled_amplitude = [(a / max_amplitude) * (sample_rate / 2) for a in amplitude]
-        # # Plot the rescaled waveform data
+        # # # Plot the rescaled waveform data
         self.curve.setData(time, rescaled_amplitude, pen='r')
         self.plot_item2.setXRange(0, audio_duration)
         self.plot_item2.setYRange(0, (sample_rate / 2) - 12000)
