@@ -8,8 +8,7 @@ from PyQt5.QtCore import QRectF
 from pyqtgraph.Qt import QtCore
 import librosa
 import librosa.display
-from pydub import AudioSegment
-from pydub.playback import play
+from collections import defaultdict
 import pyqtgraph.opengl as gl
 from pyqtgraph import QtGui
 from PyQt5.QtGui import QFont
@@ -46,7 +45,8 @@ import pyqtgraph as pg
 from pycutie_3 import Ui_MainWindow # was using pycutie_3 previously, for working version
 from scipy.signal import spectrogram
 dct_obj = {}
-prob_threshold = 0.5
+to_print = []
+# prob_threshold = 0.5
 color = QtGui.QColor(0, 0, 255, 3)  # Blue with 100 transparency
 class Phonemes:
     def __init__(self, st, et, var, prob):
@@ -177,32 +177,25 @@ class MyMainWindow(QMainWindow):
 
         p2 = self.layout_widget.addItem(self.plot_item2)
         # self.plot_item2.setContentsMargins(0, 0, 0, 0)
-        self.plot_item2.setYLink(self.plot_item)
-        self.plot_item2.setXLink(self.plot_item)
-        # Hide the x-axis ticks
-        self.plot_item.getAxis("bottom").setTicks([])
-        
-        # Optionally, hide the x-axis label as well
-        self.plot_item.getAxis("bottom").setLabel("")
-        # self.plot_item.getAxis("left").setTicks([])
-        
-        # Optionally, hide the x-axis label as well
-        self.plot_item.getAxis("left").setLabel("Amplitude")
-        # self.plot_item2.getAxis("left").setTicks([])
-        
-        # Optionally, hide the x-axis label as well
-        self.plot_item2.getAxis("left").setLabel("Frequency")
-        self.plot_item2.getAxis("bottom").setLabel("Time")
+
+ 
         # Hide the axes of the second plot item
         # self.plot_item.getAxis('left').setVisible(False)
         # self.plot_item.getAxis('bottom').setVisible(False)
         # print("p1: ", len(p1))
         # print("p2: ", len(p2))
         # Removed the linking for the demo
+        # self.plot_item2.setYLink(self.plot_item)
+        # self.plot_item2.setXLink(self.plot_item)
+        # if p1 is not None and p2 is not None:
+        #     print("linking is working")
+        #     p2.setYLink(p1)
+        # Add the ViewBox to the layout
+
+
         if p1 is not None and p2 is not None:
             print("linking is working")
             p2.setYLink(p1)
-        # Add the ViewBox to the layout
 
         # p2.setYLink('Plot1')  ## test linking by name
         scene = QGraphicsScene()
@@ -228,7 +221,7 @@ class MyMainWindow(QMainWindow):
         self.end = 0
         self.sample_rate = 0
         self.audio_data = []
-        self.audio = None
+
         # Initialize curve
         self.curve = None
         self.region_items = []
@@ -304,11 +297,13 @@ class MyMainWindow(QMainWindow):
             for detail in details_list:
                 final.append({'start_time': detail[0], 'end_time': detail[1], 'syllable': var, 'prob': detail[2]})
         print("final data: ", final)
+
         # Create a DataFrame from the list of dictionaries
         df = pd.DataFrame(final)
-        df.sort_values(by=['start_time'], inplace=True)
         df['start_time'] = df['start_time'].astype(int)
         df['end_time'] = df['end_time'].astype(int)
+        df['prob'] = df['prob'].map(lambda x: '%.6f' % x)
+        df.sort_values(by=['start_time'], inplace=True)
         print("dataframe: \n", df)
         # Save the DataFrame to a CSV file
         file_dialog = QFileDialog()
@@ -317,23 +312,30 @@ class MyMainWindow(QMainWindow):
         if file_dialog.exec_():
             file_path = file_dialog.selectedFiles()[0]
             # Use below line if you want to export with decimal values, change the datatype to float above too
-            # float_formats = {'start_time': '%.5f', 'end_time': '%.5f'}
+            # float_formats = {'prob': '%.6f'}
             df.to_csv(file_path, index=False)
             print(f"Changes saved to {file_path}")
 
     def save_changes_lab(self):
         # Create a list of dictionaries with the updated information
+        # Create a list of dictionaries with the updated information
         final = []
         for var, details_list in dct_obj.items():
-            for detail in details_list:
-                final.append({'start_time': detail[0], 'end_time': detail[1], 'syllable': var, 'prob': detail[2]})
+            print("details list: ", details_list)
+            for values in details_list:   
+                final.append({'start_time':values[0], 'end_time': values[1], 'syllable': var, 'prob': float(values[2])})
+                # else:
+            #     print(f"Ignoring invalid detail: {detail}")
         print("final data: ", final)
+        print("length of final: ", len(final))
         # Create a DataFrame from the list of dictionaries
         df = pd.DataFrame(final)
         #print("lab dataframe before sort: \n", df)
+        # df['end_time'] = df['end_time'].astype(int)
         df['start_time'] = df['start_time'].astype(int)
         df['end_time'] = df['end_time'].astype(int)
-        df.sort_values(by=['start_time'], inplace=True)
+        df['prob'] = df['prob'].map(lambda x: '%.6f' % x)
+        df.sort_values(by=['end_time'], inplace=True)
         #print("lab dataframe after sort: \n", df)
         # Save the DataFrame to a LAB file
         file_dialog = QFileDialog()
@@ -342,7 +344,7 @@ class MyMainWindow(QMainWindow):
         if file_dialog.exec_():
             file_path = file_dialog.selectedFiles()[0]
             # Use below line if you want to export with decimal values, change the datatype to float above too
-            # float_formats = {'start_time': '%.5f'}
+            # float_formats = {'prob': '%.6f'}
             df.to_csv(file_path, sep=' ', index=False, header=False)
             print(f"Changes saved to {file_path}")
             # Clear the dictionary after saving changes
@@ -358,7 +360,7 @@ class MyMainWindow(QMainWindow):
         region_item.sigRegionChanged.connect(lambda: self.sync_region_items(region_item, region_item2))
         region_item.sigRegionChanged.connect(lambda: self.handle_label_update(region_item, text_item, var, prob))
         print("region_item.sigRegionChanged.connect(lambda: self.update_changed_time(var, prob, region_item.getRegion()))")
-        region_item.sigRegionChanged.connect(lambda: self.update_changed_time(var, prob, region_item.getRegion()))
+        region_item.sigRegionChanged.connect(lambda: self.update_changed_time(var, prob, region_item))
         region_item.sigRegionChangeFinished.connect(lambda: self.adjust_next_region(region_item))
 
     def adjust_next_region(self, current_region_item):
@@ -378,7 +380,7 @@ class MyMainWindow(QMainWindow):
                 next_region_item.setRegion([current_end_time, next_region_item.getRegion()[1]])
                 previous_region_item = self.region_items[index_current - 1]
                 previous_start_time, _ = previous_region_item.getRegion()
-                previous_region_item.setRegion([previous_start_time, current_start_time])
+                previous_region_item.setRegion([int(previous_start_time), int(current_start_time)])
                 # Toggle the appearance of the region item
                 # current_brush_color = self.brush.color().name()
                 # print("color: ", current_brush_color)       
@@ -414,25 +416,51 @@ class MyMainWindow(QMainWindow):
             self.end = self.audio_len
             return
 
+
     def update_changed_time(self, var, prob, region_values):
-        start_time, end_time = region_values
+        # start_time, end_time = region_values.getRegion()
+        index_current = self.region_items.index(region_values)
+        # print("changed time of new added var:\n start time ", start_time, "end time \n", end_time)
+        # # if region_values in self.changed_time:
+        # # Append to changed_time defaultdict directly
+        # self.changed_time[var].append((start_time, end_time, prob))
+        # # to_print.append((start_time, end_time, var, prob))
+        
+        # print("Updated dictionary details:", self.changed_time)
+        
+        # # Update the corresponding values in dct_obj
+        # dct_obj[var].append((start_time, end_time, prob))
+        # # dct_obj = {set(dct_obj)}
+        # print("Updated dct_obj:", dct_obj)     
+
+
+        start_time, end_time = region_values.getRegion()
         print("changed time of new added var:\n start time ", start_time, "end time \n", end_time)
-        if var in self.changed_time:
-            self.changed_time[var].append((start_time, end_time, prob))
+        if index_current in self.changed_time:
+            self.changed_time[index_current].extend((start_time, end_time, var, prob))
         else:    
-            self.changed_time[var] = [(start_time, end_time, prob)]
+            self.changed_time[index_current] = [(start_time, end_time, var, prob)]
         print("Updated dictionary details:", self.changed_time)
         # Update the corresponding values in dct_obj
-        if var in dct_obj.items():
-            dct_obj[var].append((start_time, end_time, prob))
+        if index_current in dct_obj.items():
+            dct_obj[index_current].extend((start_time, end_time, prob))
         else:
         # If the syllable is enprobered for the first time, create a new list with its details
-            dct_obj[var] = [(start_time, end_time, prob)]
+            dct_obj[index_current] = [(start_time, end_time, prob)]
         
-        print("Updated dct_obj:", dct_obj)        
+        print("Updated dct_obj:", dct_obj) 
 
     def reset(self):
         # Clear all regions
+        # Iterate over the items in dct_obj and print them
+        # for key, value in dct_obj.items():
+        #     print(f"Variable: {key}")
+        #     for occurrence in value:
+        #         start_time, end_time, prob = occurrence
+        #         print(f"Start Time: {start_time}, End Time: {end_time}, Probability: {prob}")
+        # for item in to_print:
+        #     print(item)
+        #     print('\n')
         for region_item in self.region_items:
             self.plot_item.removeItem(region_item)
         print("region items to be cleared: \n", self.region_items)
@@ -459,7 +487,7 @@ class MyMainWindow(QMainWindow):
         label_x, label_y = region_values # + (region_values[1] - region_values[0]) / 2
         print("region value[0]: ", label_x)
         # Update the text item text and position
-        text_item.setText(f"{var}\n{prob}")
+        text_item.setText(f"{var}\n{round(prob, 1)}")
         # Set the text color
         text_item.setColor(pg.mkColor('blue'))
         text_item.setFont(pg.QtGui.QFont("Arial", 20))
@@ -490,7 +518,7 @@ class MyMainWindow(QMainWindow):
         # file['start_time'] = file['start_time'].astype(float)
         file['start_time'] = file['start_time'].astype(float)
         file['end_time'] = file['end_time'].astype(float)
-        file['prob'] = file['prob'].astype(float).round(1)
+        file['prob'] = file['prob'].astype(float)
         print("start time \t end time \n", file['start_time'], " \t", file['end_time'])
         print("pandas file after mod: \n", file)
         zipp = zip(file['start_time'], file['end_time'], file['syllable'], file['prob'])
@@ -506,7 +534,7 @@ class MyMainWindow(QMainWindow):
             else:
                 color = QtGui.QColor(255, 0, 0, 25)
                 region_item = LinearRegionItem(values=(cell.st, cell.et,cell.var, cell.prob),orientation=pg.LinearRegionItem.Vertical, pen=pg.mkPen(color='k', width=1.5), brush=pg.mkBrush(color), swapMode='block')
-                region_item2 = LinearRegionItem(values=(cell.st, cell.et,cell.var, cell.prob),orientation=pg.LinearRegionItem.Vertical, pen=pg.mkPen(color='k', width=1.5), brush=pg.mkColor(0, 0, 0, 0), swapMode='block')            
+                region_item2 = LinearRegionItem(values=(cell.st, cell.et,cell.var, cell.prob),orientation=pg.LinearRegionItem.Vertical, pen=pg.mkPen(color='k', width=1.5), movable=False, brush=pg.mkColor(0, 0, 0, 0), swapMode='block')            
             self.region_items.append(region_item)
             print("appending to region_lst")
             self.region_lst.append([index, [cell.st, cell.et, cell.var, cell.prob]])
@@ -566,6 +594,8 @@ class MyMainWindow(QMainWindow):
         self.audio_playing = True
         print("Start Time:", start_time)
         print("End Time:", end_time)
+        print("Start Time:", start_time)
+        print("End Time:", end_time)
         start = start_time / 1e7
         end = end_time / 1e7
         print("start: ", start)
@@ -576,20 +606,15 @@ class MyMainWindow(QMainWindow):
         print("start index:", start_index)
         print("end index:", end_index)
         # Extract audio data within the specified start and end time
-        audio_segment = self.audio_data[int(start_index):int(end_index)]
-        print("length of audio data: ", len(self.audio_data))
-        print("length of audio: ", len(self.audio))
-        # # print("audio segment: \n", audio_segment)
-        # # Increase buffer size to reduce underruns
-        # blocksize = 2048  # Experiment with different values to find the optimal buffer size
-        # print("Sample Rate:", self.sample_rate)
-        # print("Frames:", self.sample_rate)
+        audio_segment = self.audio_data[start_index:end_index]
+        # print("audio segment: \n", audio_segment)
+        # Increase buffer size to reduce underruns
+        blocksize = 2048  # Experiment with different values to find the optimal buffer size
+        print("Sample Rate:", self.sample_rate)
         # Start audio playback
-        # sd.play(audio_segment, samplerate=self.sample_rate, blocksize=blocksize)
-        # sd.wait()  # Wait until playback is finished
+        sd.play(audio_segment, samplerate=self.sample_rate, blocksize=blocksize)
+        sd.wait()  # Wait until playback is finished
         # Set the flag to indicate that audio playback has finished
-        play(audio_segment)
-        print("audio finished")
         self.audio_playing = False
 
     def create_region_item(self, start_time, end_time, syllable, prob):
@@ -645,8 +670,6 @@ class MyMainWindow(QMainWindow):
         # self.layout_widget.addItem(self.plot_item2, 1, 0, 1, 1)
 
         wave_obj = wave.open(path, 'rb')
-        audio = AudioSegment.from_file(path)
-        self.audio = audio
         sample_width = wave_obj.getsampwidth()
         num_frames = wave_obj.getnframes()
         # Get the sample rate
@@ -741,8 +764,31 @@ class MyMainWindow(QMainWindow):
         rescaled_amplitude = [(a / max_amplitude) * (sample_rate / 2) for a in amplitude]
         # # # Plot the rescaled waveform data
         self.curve.setData(time, rescaled_amplitude, pen='r')
+        # Hide the x-axis ticks
+        self.plot_item.getAxis("bottom").setTicks([])
+        
+        # Optionally, hide the x-axis label as well
+        self.plot_item.getAxis("bottom").setLabel("")
+        # self.plot_item.getAxis("left").setTicks([])
+        
+        # Optionally, hide the x-axis label as well
+        self.plot_item.getAxis("left").setLabel("Amplitude")
+
+        # self.plot_item.setTickSpacing(-1) 
+        # self.plot_item2.getAxis("left").setTicks([])
+        
+        # Optionally, hide the x-axis label as well
+        self.plot_item2.getAxis("left").setLabel("Frequency")
+        self.plot_item2.getAxis("bottom").setLabel("Time")
+        self.plot_item.getAxis('left').setWidth(int(75))
+        self.plot_item2.getAxis('left').setWidth(int(75))
         self.plot_item2.setXRange(0, audio_duration)
         self.plot_item2.setYRange(0, (sample_rate / 2) - 12000)
+        # self.plot_item2.setYLink(self.plot_item)
+        self.plot_item2.setXLink(self.plot_item)
+
+
+
 
     def resizeEvent(self, event):
         # Resize the plot widget along with the central widget
