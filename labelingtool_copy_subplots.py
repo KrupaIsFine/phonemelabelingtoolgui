@@ -8,7 +8,7 @@ from PyQt5.QtCore import QRectF
 from pyqtgraph.Qt import QtCore
 import librosa
 import librosa.display
-from collections import defaultdict
+from PyQt5.QtWidgets import QGraphicsSceneContextMenuEvent, QMenu
 import pyqtgraph.opengl as gl
 from pyqtgraph import QtGui
 from PyQt5.QtGui import QFont
@@ -42,10 +42,10 @@ from PyQt5.QtGui import QColor
 from PyQt5.QtCore import pyqtSignal
 from pyqtgraph import LinearRegionItem
 import pyqtgraph as pg
-from pycutie_3 import Ui_MainWindow # was using pycutie_3 previously, for working version
-from scipy.signal import spectrogram
+from pycutie_3 import Ui_MainWindow # Working version of UI File
 dct_obj = {}
 to_print = []
+# index = 0
 # prob_threshold = 0.5
 color = QtGui.QColor(0, 0, 255, 3)  # Blue with 100 transparency
 class Phonemes:
@@ -53,23 +53,41 @@ class Phonemes:
         self.st = st
         self.et = et
         self.var = var
-        # self.fss = fss
         self.prob = prob
 
 
-def create_cells(row):    
+def create_cells(row):
+    # global index    
     new_cell = Phonemes(row[0], row[1], row[2], row[3])
         # Check if the syllable already exists in dct_obj
-    if new_cell.var in dct_obj:
-        # If the syllable exists, append the new cell's details to its existing entry
-        dct_obj[new_cell.var].append((new_cell.st, new_cell.et, new_cell.prob))
-    else:
-        # If the syllable is enprobered for the first time, create a new list with its details
-        dct_obj[new_cell.var] = [(new_cell.st, new_cell.et, new_cell.prob)]
+    # if new_cell.var in dct_obj:
+    #     # If the syllable exists, append the new cell's details to its existing entry
+    #     dct_obj[index].append((new_cell.st, new_cell.et, new_cell.var, new_cell.prob))
+    #     index += 1
+    # else:
+    #     # If the syllable is enprobered for the first time, create a new list with its details
+    #     dct_obj[index] = [(new_cell.st, new_cell.et, new_cell.var, new_cell.prob)]
+    #     index += 1
     return new_cell
+
+def create_dct_obj(lst):
+    for item in lst:
+        index = item[0]
+        st = item[1][0]
+        et = item[1][1]
+        var = item[1][2]
+        prob = item[1][3]
+        print("index = item[0] st = item[1][0]et = item[1][1]var = item[1][2]prob = item[1][3]: ", index,
+        st,
+        et,
+        var,
+        prob)
+        dct_obj[index] = [(st, et, var, prob)]
+
 
 class LinearRegionItem(pg.LinearRegionItem):
     clicked = pyqtSignal(LinearRegionItem, float, float, int)
+    brush_color = None
     # Custom signal with region values
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -95,26 +113,53 @@ class LinearRegionItem(pg.LinearRegionItem):
             # self.setBrush(org_color)
             # print("original color: ", self.brush.color().name())
             #self.setBrush(org_color)  
-    
-    def update_linedit(self, st, et, var, prob):
-        self.ui.lineEdit.setText(st)
-        self.ui.lineEdit_2.setText(et)
-        self.ui.lineEdit_3.setText(var)
-        # self.ui.lineEdit_4.setText(fss)
-        self.ui.lineEdit_5.setText(prob)
+
+    def update_linedit(self, st, et):
+        # Assuming self.ui represents the UI where the QLineEdit widgets are located
+        if hasattr(self, 'ui'):
+            self.ui.lineEdit.setText(str(st))
+            self.ui.lineEdit_2.setText(str(et))
+
+
+    def contextMenuEvent(self, event: QGraphicsSceneContextMenuEvent):
+        flag = 0
+        region_values = self.getRegion()
+        st = region_values[0]
+        et = region_values[1]
+        menu = QMenu()
+        action1 = menu.addAction("Select")
+        action2 = menu.addAction("Deselect")
+        
+        action = menu.exec_(event.screenPos())
+        if action == action1:
+            print("Action 1 triggered")
+            self.highlight_region()
+            self.clicked.emit(self, st, et, flag)
+        elif action == action2:
+            self.deselect_region()
+            flag = 1
+            self.clicked.emit(self, st, et, flag)
+            print("Action 2 triggered")
+            # Add your action 2 handling code here
+
 
     def highlight_region(self):
         # Toggle the appearance of the region item
-        current_brush_color = self.brush.color().name()
-        print("color: ", current_brush_color)       
+        current_brush_color = self.brush.color()
+        self.brush_color = current_brush_color
+        print("color: ", current_brush_color.name())       
         # Determine the new brush color
         new_brush_color = QColor('#0000ff')
         print("new color: ", new_brush_color.name())
         new_brush_color.setAlpha(25)       
         # Set the brush color
         self.setBrush(new_brush_color)
+
         print("Brush color after setting: ", self.brush.color().name())  # Debugging
 
+    def deselect_region(self):
+        self.setBrush(self.brush_color)
+        print("Brush color after deselecting-if statement: ", self.brush.color().name())  # Debugging
 class MyMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -134,6 +179,7 @@ class MyMainWindow(QMainWindow):
         # Connect the Reset button to the reset method
         self.ui.pushButton_6.clicked.connect(self.reset)
         self.ui.pushButton_8.clicked.connect(self.play_audio)
+        self.threshold = 0
         # Create a PyQtGraph PlotWidget
         # self.spectrogram_plot = pg.PlotWidget(background='w')
         # self.spectrogram_plot.setLabel("bottom", text="Time(s)")
@@ -228,6 +274,7 @@ class MyMainWindow(QMainWindow):
         self.text_items = []
         self.audio_len = 0
         self.region_lst = []
+
         # Enable mouse interactions for zooming
         self.plot_item.setMouseEnabled(x=True, y=False)
         self.plot_item2.setMouseEnabled(x=True, y=False)
@@ -259,7 +306,7 @@ class MyMainWindow(QMainWindow):
         end_time_text = self.ui.lineEdit_3.text()
         syllable_text = self.ui.lineEdit_5.text()
         # fss_text = self.ui.lineEdit_4.text()
-        prob_text = self.ui.lineEdit.text()
+        prob_text = float(self.ui.lineEdit_4.text())
         # Perform further actions with the input values, e.g., display them, store them, etc.
         print("Start Time:", start_time_text)
         print("End Time:", end_time_text)
@@ -267,13 +314,13 @@ class MyMainWindow(QMainWindow):
         # print("fss:", fss_text)
         print("prob:", prob_text)
         # Convert text to appropriate data types (float or int)
-        start_time = float(start_time_text)
-        end_time = float(end_time_text)
+        start_time = int(start_time_text)
+        end_time = int(end_time_text)
         # fss = int(fss_text)
-        prob = int(prob_text)
+        prob = float(prob_text)
         # Call the method to create a new region item
-        new_cell = start_time, end_time, syllable_text, prob
-        create_cells(new_cell)  # Assuming create_cells accepts a Phonemes object as input
+        # new_cell = start_time, end_time, syllable_text, prob
+        # create_cells(new_cell)  # Assuming create_cells accepts a Phonemes object as input
         self.create_region_item(start_time, end_time, syllable_text, prob)
 
     def load_audio_file(self):
@@ -296,7 +343,7 @@ class MyMainWindow(QMainWindow):
         for var, details_list in dct_obj.items():
             for detail in details_list:
                 final.append({'start_time': detail[0], 'end_time': detail[1], 'syllable': var, 'prob': detail[2]})
-        print("final data: ", final)
+        # print("final data: ", final)
 
         # Create a DataFrame from the list of dictionaries
         df = pd.DataFrame(final)
@@ -320,10 +367,10 @@ class MyMainWindow(QMainWindow):
         # Create a list of dictionaries with the updated information
         # Create a list of dictionaries with the updated information
         final = []
-        for var, details_list in dct_obj.items():
-            print("details list: ", details_list)
+        for index, details_list in dct_obj.items():
+            print("details list: ", index, details_list)
             for values in details_list:   
-                final.append({'start_time':values[0], 'end_time': values[1], 'syllable': var, 'prob': float(values[2])})
+                final.append({'start_time':values[0], 'end_time': values[1], 'syllable': values[2], 'prob': float(values[3])})
                 # else:
             #     print(f"Ignoring invalid detail: {detail}")
         print("final data: ", final)
@@ -350,24 +397,42 @@ class MyMainWindow(QMainWindow):
             # Clear the dictionary after saving changes
             #dct_obj.clear()
 
+
+    # def contextMenu(self):
+    #     self.region
+
+
     def connect_region_signals(self, region_item, region_item2, text_item, var, prob):
         start_time, end_time = region_item.getRegion()
         print("region item: ", region_item.getRegion())
         print("st: ", start_time)
         print("et: ", end_time)
+        print("var: ", var)
+        print("prob: ", prob)
         print("region_item.sigRegionChanged.connect(lambda: self.handle_label_update(region_item, text_item, var, prob))")
         # Connect signals when the clickable_region_item's clicked signal is successfully connected
         region_item.sigRegionChanged.connect(lambda: self.sync_region_items(region_item, region_item2))
         region_item.sigRegionChanged.connect(lambda: self.handle_label_update(region_item, text_item, var, prob))
         print("region_item.sigRegionChanged.connect(lambda: self.update_changed_time(var, prob, region_item.getRegion()))")
+        # Error in these two for new region creation
         region_item.sigRegionChanged.connect(lambda: self.update_changed_time(var, prob, region_item))
-        region_item.sigRegionChangeFinished.connect(lambda: self.adjust_next_region(region_item))
+        region_item.sigRegionChangeFinished.connect(lambda: self.adjust_next_region(region_item, var, prob))
 
-    def adjust_next_region(self, current_region_item):
+    def adjust_next_region(self, current_region_item, var, prob):
         if current_region_item.movable:
             print("True")
+            start, end = current_region_item.getRegion()
+            cell = [(float(int(start)), float(int(end)), var, prob)]
+            index_current = None
+            for key, value in dct_obj.items():
+                print("value: ", value)
+                print("cell: ", [cell])
+                if value == cell:
+                    index_current = key
+                    print("found index = ", index_current)
+                    break
             # Assuming region_items is a list containing all region items
-            index_current = self.region_items.index(current_region_item)
+            # index_current = self.region_dct.index(current_region_item)
             print("index current: ", index_current)
             print("len self region: ", len(self.region_items))
             #for end time boundary dragging
@@ -380,7 +445,9 @@ class MyMainWindow(QMainWindow):
                 next_region_item.setRegion([current_end_time, next_region_item.getRegion()[1]])
                 previous_region_item = self.region_items[index_current - 1]
                 previous_start_time, _ = previous_region_item.getRegion()
-                previous_region_item.setRegion([int(previous_start_time), int(current_start_time)])
+                previous_start_time = int(previous_start_time)
+                current_start_time = int(current_start_time)
+                previous_region_item.setRegion([float(previous_start_time), float(current_start_time)])
                 # Toggle the appearance of the region item
                 # current_brush_color = self.brush.color().name()
                 # print("color: ", current_brush_color)       
@@ -417,38 +484,67 @@ class MyMainWindow(QMainWindow):
             return
 
 
+    # def update_changed_time(self, var, prob, region_values):
+    #     start_time, end_time = region_values.getRegion()
+    #     index_current = str(self.region_items.index(region_values))
+    #     print("changed time of new added var:\n start time ", start_time, "end time \n", end_time)
+
+    #     # if index_current in self.changed_time:
+    #     #     self.changed_time[index_current].append((start_time, end_time, var, prob))
+    #     # else:
+    #     self.changed_time[index_current] = [start_time, end_time, var, prob]
+    #     # print("Updated dictionary details:", self.changed_time)
+
+    #     if index_current in dct_obj:
+    #         print("dct_obj: \n", dct_obj)
+    #         dct_obj[index_current].update[(start_time, end_time, var, prob)]
+    #     else:
+    #         dct_obj[index_current] = [(start_time, end_time, var, prob)]
+        
+    #     print("Updated dct_obj:", dct_obj)
+
+
     def update_changed_time(self, var, prob, region_values):
-        # start_time, end_time = region_values.getRegion()
-        index_current = self.region_items.index(region_values)
-        # print("changed time of new added var:\n start time ", start_time, "end time \n", end_time)
-        # # if region_values in self.changed_time:
-        # # Append to changed_time defaultdict directly
-        # self.changed_time[var].append((start_time, end_time, prob))
-        # # to_print.append((start_time, end_time, var, prob))
-        
-        # print("Updated dictionary details:", self.changed_time)
-        
-        # # Update the corresponding values in dct_obj
-        # dct_obj[var].append((start_time, end_time, prob))
-        # # dct_obj = {set(dct_obj)}
-        # print("Updated dct_obj:", dct_obj)     
-
-
         start_time, end_time = region_values.getRegion()
+        cell = [(float(int(start_time)), float(int(end_time)), var, prob)]
+        print("cell inside update: ", cell)
+
+        for item in dct_obj.items():
+            print("item: ", item)
+
+        index_current = 0                      
+        for index, value in dct_obj.items():
+            if value == cell:
+                index_current = int(index)
+                print("index is: ", index_current)
+            else:
+                break
+        print("index_current: ", index_current)
+        # index_current = dct_obj.index(region_values)
         print("changed time of new added var:\n start time ", start_time, "end time \n", end_time)
-        if index_current in self.changed_time:
-            self.changed_time[index_current].extend((start_time, end_time, var, prob))
-        else:    
-            self.changed_time[index_current] = [(start_time, end_time, var, prob)]
-        print("Updated dictionary details:", self.changed_time)
-        # Update the corresponding values in dct_obj
-        if index_current in dct_obj.items():
-            dct_obj[index_current].extend((start_time, end_time, prob))
-        else:
-        # If the syllable is enprobered for the first time, create a new list with its details
-            dct_obj[index_current] = [(start_time, end_time, prob)]
-        
-        print("Updated dct_obj:", dct_obj) 
+        start_time = float(int(start_time))
+        end_time = float(int(end_time))
+        # Update self.changed_time
+        self.changed_time[index_current] = [start_time, end_time, var, prob]
+
+        # Update dct_obj
+        # if index_current in dct_obj:
+            # print("dct_obj: \n", dct_obj)
+            # print("just checking")
+            # dct_obj[index_current] = [(start_time, end_time, var, prob)]  # Update the list
+        # if index_current in dct_obj:
+        # del(dct_obj[index_current])
+        dct_obj[index_current] = [(start_time, end_time, var, prob)]
+        # print("deleted")
+        # else:
+        #     dct_obj[index_current] = [(float(start_time), float(end_time), var, prob)]
+        #     print("just checking")
+        #     print("dict obj of current index: ", dct_obj[index_current])
+    
+        # print("Updated dct_obj:", dct_obj)
+
+
+
 
     def reset(self):
         # Clear all regions
@@ -535,11 +631,12 @@ class MyMainWindow(QMainWindow):
                 color = QtGui.QColor(255, 0, 0, 25)
                 region_item = LinearRegionItem(values=(cell.st, cell.et,cell.var, cell.prob),orientation=pg.LinearRegionItem.Vertical, pen=pg.mkPen(color='k', width=1.5), brush=pg.mkBrush(color), swapMode='block')
                 region_item2 = LinearRegionItem(values=(cell.st, cell.et,cell.var, cell.prob),orientation=pg.LinearRegionItem.Vertical, pen=pg.mkPen(color='k', width=1.5), movable=False, brush=pg.mkColor(0, 0, 0, 0), swapMode='block')            
+            # region_item.addAction(self.newAction)
             self.region_items.append(region_item)
             print("appending to region_lst")
             self.region_lst.append([index, [cell.st, cell.et, cell.var, cell.prob]])
             # print("region item after appending: \n", self.region_lst)
-
+            index += 1
             self.plot_item.addItem(region_item)
             self.plot_item2.addItem(region_item2)
             # self.plot_item2.addItem(region_item)
@@ -562,8 +659,9 @@ class MyMainWindow(QMainWindow):
             # Append the text item to the list of text items
             self.text_items.append(text_item)
             print("main region item:", region_item)
-            index += 1
-            
+
+            create_dct_obj(self.region_lst)
+
             # Connect the clicked signal of the region item to a slot
             region_item.clicked.connect(self.display_clicked_values)
             # Connect sigRegionChanged signals of both region items
@@ -571,6 +669,9 @@ class MyMainWindow(QMainWindow):
             # Connect other signals and perform necessary setup
             self.connect_region_signals(region_item, region_item2, text_item, cell.var, cell.prob)
             self.handle_label_update(region_item, text_item, cell.var, cell.prob)
+
+        # for item in self.region_lst:
+        #     print("plot data item: ", item)
 
         # self.plot_item.setLabel("bottom", text="Time")
         # self.plot_item.getPlotItem().getAxis("bottom").orientation = 'top'
@@ -617,48 +718,124 @@ class MyMainWindow(QMainWindow):
         # Set the flag to indicate that audio playback has finished
         self.audio_playing = False
 
-    def create_region_item(self, start_time, end_time, syllable, prob):
+    def create_region_item(self, start_time, end_time, var, prob):
+        st = start_time
+        et = end_time
+        v = var
+        p = prob
         # Create the new region item
-        if prob < 0.5:
-            color = QtGui.QColor(255, 0, 0, 25)
-        else:
+        avg_prob = self.threshold
+        if prob > avg_prob:
             color = QtGui.QColor(0, 255, 0, 25)
-        region_item = LinearRegionItem(values=(start_time, end_time, syllable, prob),
-                                    orientation=pg.LinearRegionItem.Vertical,
-                                    pen=pg.mkPen(color='k', width=1.5), brush=pg.mkBrush(color), swapMode='block')
-        # Find the index where the new region item should be inserted
-        insert_index = 0
-        for index, region in enumerate(self.region_lst):
-            if start_time < region[1][0]:  # Compare with start time of each existing region
-                insert_index = index
-                break
+            region_item = LinearRegionItem(values=(st, et, v, p),orientation=pg.LinearRegionItem.Vertical, pen=pg.mkPen(color='k', width=1.5), movable=False, brush=pg.mkBrush(color), swapMode='block')
+            region_item2 = LinearRegionItem(values=(st, et, v, p),orientation=pg.LinearRegionItem.Vertical, pen=pg.mkPen(color='k', width=1.5), movable=False, brush=pg.mkColor(0, 0, 0, 0), swapMode='block')
         else:
-            insert_index = len(self.region_items)
-        # Insert the new region item into the region_items list
-        self.region_items.insert(insert_index, region_item)
-        # print("insertes region item {0} at index {1}".format(region_item, insert_index))
-        # Update the region list with the new region information
-        self.region_lst.insert(insert_index, [insert_index, [start_time, end_time, syllable, prob]])
-        # Add the region item to the plot widget
-        self.plot_item.addItem(region_item)
-        print(f"New region item created for syllable: {syllable}")
+            color = QtGui.QColor(255, 0, 0, 25)
+            region_item = LinearRegionItem(values=(st, et, v, p),orientation=pg.LinearRegionItem.Vertical, pen=pg.mkPen(color='k', width=1.5), brush=pg.mkBrush(color), swapMode='block')
+            region_item2 = LinearRegionItem(values=(st, et, v, p),orientation=pg.LinearRegionItem.Vertical, pen=pg.mkPen(color='k', width=1.5), movable=False, brush=pg.mkColor(0, 0, 0, 0), swapMode='block')            
+
+        print(f"New region item created for syllable: {var}")
+
+
+
         # border_color = QtGui.QColor(255, 0, 0, 100)  # Red border
         # fill_color = QtGui.QColor(0, 255, 0, 100)  # Green fill with alpha value 100
-        text_item = pg.TextItem(text=f"{syllable}\n{prob}", anchor=(0, 0))
+        border_color = QtGui.QColor(255, 0, 0, 100)  # Red border
+        fill_color = QtGui.QColor(240, 240, 240, 255)  # Green fill with alpha value 100
+        print("new variable: ", var)
+        text_item = pg.TextItem(text=f"{v}\n{p}", border=border_color, fill=fill_color)
+
         self.text_items.append(text_item)
         self.plot_item.addItem(text_item)
         print("Text items of new region: ", self.text_items)
+
+        self.plot_item.addItem(region_item)
+        self.plot_item2.addItem(region_item2)
+        # for item in self.region_lst:
+        #     print("regions item: ", item)
+
+        print("starttime: ", st)
+        print("endtime: ", et)
+        print("var: ", v)
+        print("prob: ", p)
+        # Find the index where the new region item should be inserted
+        insert_index = 0
+        temp_region = []
+        for index, region in enumerate(self.region_lst):
+
+            print("index, region: ", index, region)
+            if start_time < region[1][0]:  # Compare with start time of each existing region
+                insert_index = index
+                temp_region.extend(region)
+                self.region_lst.insert(insert_index, [insert_index, [float(st), float(et), v, p]])
+                new_cell = float(st), float(et), v, p
+                print("new cell[0]: ", new_cell[0])
+                create_cells(new_cell)
+                print("temp_region: ", temp_region)
+                break
+        else:
+            insert_index = len(self.region_items)
+
+        for region in reversed(self.region_lst[insert_index + 1:]):
+            index = region[0]
+            print("index: ", index)
+            print("region: ", region)
+            region[0] += 1
+            index = region[0]
+            print("index: ", index)
+            print("region: ", region)
+
+        # print("insert index: ", insert_index)
+        # print("region item: ", temp_region)
+        # for item in self.region_lst:
+        #     print("regions item: ", item)
+
+        for item in self.region_lst:
+            print("region object: ", item)
+
+        dct_obj.clear()
+        # region_dct = {}
+        
+        # print("insert_index: ", insert_index)
+        # for region in self.region_lst:
+        #     index = region[0]
+        #     st = region[1][0]
+        #     et = region[1][1]
+        #     var = region[1][2]
+        #     prob = region[1][3]
+        #     dct_obj[index] = [(st, et, var, prob)]
+            # print("regions dct: ", region_dct)
+            # region[0] += 1
+
+        # Insert the new region item into the region_items list
+        
+        # print("insertes region item {0} at index {1}".format(region_item, insert_index))
+        # Update the region list with the new region information
+
+        # self.region_lst.insert(insert_index, [insert_index, [float(start_time), float(end_time), var, prob]])
+        # # # Update the indexes of subsequent regions
+        # for index, region in enumerate(self.region_lst[insert_index + 1:], start=insert_index + 1):
+        #     region[0] += 1
+        # Add the region item to the plot widget
+
         # Connect the clicked signal of the region item to a slot
-        region_item.clicked.connect(self.display_clicked_values)
-        self.connect_region_signals(region_item, text_item, syllable, prob)
-        self.handle_label_update(region_item, text_item, syllable, prob)
-        print(f"New region item created for syllable: {syllable}")
+        # region_item.clicked.connect(self.display_clicked_values)
+        # flag = 1
+        # dct_obj.clear()
+        create_dct_obj(self.region_lst)
+        for item in dct_obj.items():
+            print("region object in creation: ", item) 
+        self.connect_region_signals(region_item, region_item2, text_item, v, p)
+        self.handle_label_update(region_item, text_item, var, prob)
+        # print(f"New region item created for syllable: {var}")
         # Clear QLineEdit boxes
         self.ui.lineEdit.clear()
         self.ui.lineEdit_6.clear()
         self.ui.lineEdit_3.clear()
         self.ui.lineEdit_4.clear()
         self.ui.lineEdit_5.clear()
+
+
 
     def plot_graph(self, path):
         # Open the audio file and extract data
@@ -707,8 +884,8 @@ class MyMainWindow(QMainWindow):
 
         # Compute spectrogram
         # Correctly plotting the spectrogram without much pixelation
-        n_fft = 512 # FFT window size crct - 64
-        hop_length = 64 # Hop length (frame shift) crct - 16
+        n_fft = 1024 # FFT window size crct - 64
+        hop_length = 512 # Hop length (frame shift) crct - 16
         D = librosa.stft(audio_data, n_fft=n_fft, hop_length=hop_length)
         # # Magnitude Details
         spec = librosa.amplitude_to_db(np.abs(D), ref=np.max)
