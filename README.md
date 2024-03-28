@@ -1,6 +1,6 @@
-# Syllable-Level-Labeling-Tool-GUI
+# Phoneme-Level-Labeling-Tool-GUI
 
-This is a Syllable-Level-Labeling-Tool developed using PyQt5 for annotating the dataset (.lab files generated from HS) and boundary correcting the audio waveform with respect to its syllable sounds.
+This is a Phoneme-Level-Labeling-Tool developed using PyQt5 for annotating the dataset (.lab files generated from HSA) and boundary correcting the audio waveform with respect to its phonetic sounds.
 Please refer the GUI Demo video file provided to visually understand the tool's functionality.
 
 Steps:
