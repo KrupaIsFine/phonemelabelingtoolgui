@@ -7,20 +7,18 @@ Steps:
 ------
 Installation
 ------------
-1. Install Miniconda/Anaconda. Create a new conda virtual environment
+1. Create a Python Virtual Environment [opt. Install Miniconda/Anaconda. Create a new conda virtual environment]
 ```
-   conda create -n <env-name>
+   python -m venv <env-name>
 ```
 2. Activate your new environment
+   [Linux]
 ```
-   conda activate <env-name>
+   source <env-name>/bin/activate
 ```
 3. Install the required packages
 ```
-   conda install pip
-   pip install PyQt5==5.15.10
-   pip install pyqtgraph==0.13.3
-   pip install sounddevice==0.4.6
+   pip install numpy pandas librosa sounddevice pyqt5 pyqtgraph
 ```
 
 Executing the Code
