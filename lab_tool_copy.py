@@ -3,9 +3,7 @@ import wave
 import csv
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import librosa
-import librosa.display
 import sounddevice as sd
 import pyqtgraph as pg
 from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QGraphicsScene, QGraphicsSceneContextMenuEvent, QMenu
@@ -75,11 +73,6 @@ class LinearRegionItem(pg.LinearRegionItem):
             self.clicked.emit(self, st, et, flag)
 
 
-    def update_linedit(self, st, et):
-        # Assuming self.ui represents the UI where the QLineEdit widgets are located
-        if hasattr(self, 'ui'):
-            self.ui.lineEdit.setText(str(st))
-            self.ui.lineEdit_2.setText(str(et))
 
     def contextMenuEvent(self, event: QGraphicsSceneContextMenuEvent):
         flag = 0
@@ -89,6 +82,9 @@ class LinearRegionItem(pg.LinearRegionItem):
         menu = QMenu()
         action1 = menu.addAction("Select")
         action2 = menu.addAction("Deselect")
+        # Drag yes
+        # Drag no
+        action3 = menu.addAction("Play")
         
         action = menu.exec_(event.screenPos())
         if action == action1:
@@ -102,6 +98,13 @@ class LinearRegionItem(pg.LinearRegionItem):
             self.clicked.emit(self, st, et, flag)
             if DEBUG:
                 print("Action 2 triggered")
+        # elif action == action3:
+        #     ui = MyMainWindow()
+        #     ui.play_audio(self)
+        #     flag = 1
+        #     self.clicked.emit(self, st, et, flag)
+        #     if DEBUG:
+        #         print("Action 3 triggered")
 
 
     def highlight_region(self):
@@ -113,6 +116,7 @@ class LinearRegionItem(pg.LinearRegionItem):
         new_brush_color.setAlpha(25)       
         # Set the brush color
         self.setBrush(new_brush_color)
+        self.setMovable(True)
         if DEBUG:
             print("color: ", current_brush_color.name())       
             print("new color: ", new_brush_color.name())
@@ -122,6 +126,8 @@ class LinearRegionItem(pg.LinearRegionItem):
         self.setBrush(self.brush_color)
         if DEBUG:
             print("Brush color after deselecting-if statement: ", self.brush.color().name())  # Debugging
+
+
 
 class MyMainWindow(QMainWindow):
     def __init__(self):
@@ -135,6 +141,10 @@ class MyMainWindow(QMainWindow):
         self.ui.pushButton_3.clicked.connect(self.load_csv_file)
         # Connect the Export As .csv button to the save_changes_csv method
         self.ui.pushButton_12.clicked.connect(self.save_changes_csv)
+        self.ui.pushButton_11.clicked.connect(self.zoom_in)
+        self.ui.pushButton_10.clicked.connect(self.zoom_out)
+        self.ui.pushButton_4.clicked.connect(self.update)
+        self.zoom_factor = 1.0
         # Connect the Export As .lab button to the save_changes_lab method
         self.ui.pushButton_5.clicked.connect(self.save_changes_lab)
         # Connect the new region creation button press to a method
@@ -205,6 +215,38 @@ class MyMainWindow(QMainWindow):
         # Connect the sceneRectChanged signal of the scene to adjust the layout widget's size
         scene.sceneRectChanged.connect(self.adjustLayoutWidgetSize)
 
+    def zoom_in(self):
+        # Increase zoom factor
+        self.plot_item.getViewBox().scaleBy((0.5, 0.5))
+        # print("Zoom In:", self.zoom_factor)
+
+    def zoom_out(self):
+        # Decrease zoom factor
+        self.plot_item.getViewBox().scaleBy((2, 2))
+        # print("Zoom Out:", self.zoom_factor)
+
+    def update_linedit(self, region_item, var, prob):
+            print("region item: ", region_item)
+
+            st, et = region_item.getRegion()
+            var = var
+            prob = prob
+            print("st = region_item[0] et = region_item[1] phone = region_item[2] prob = region_item[3]", st, et, var, prob)
+            self.ui.lineEdit_6.setText(str(st))
+            self.ui.lineEdit_3.setText(str(et))
+            self.ui.lineEdit_5.setText(str(var))
+            self.ui.lineEdit_4.setText(str(prob))
+            self.update(region_item, st, et, var, prob)
+            # #if clicked update, change the info from dct_obj
+            # #else create the flow anew
+            # if self.ui.pushButton_4.isDown():
+            #     print("update button is clicked")
+
+    def update(self,region_item, st, et, var, prob):
+        index_current = self.region_items.index(region_item)
+        
+            
+
     def adjustLayoutWidgetSize(self, rect):
         # Resize the plot widget along with the central widget
         self.plot_item.setGeometry(rect.toRect())
@@ -250,14 +292,14 @@ class MyMainWindow(QMainWindow):
     def save_changes_csv(self):
         # Create a list of dictionaries with the updated information
         final = []
-        for var, details_list in dct_obj.items():
+        for index, details_list in dct_obj.items():
             for detail in details_list:
-                final.append({'start_time': detail[0], 'end_time': detail[1], 'syllable': var, 'prob': detail[2]})
+                final.append({'start_time': detail[0], 'end_time': detail[1], 'syllable': detail[2], 'prob': float(detail[3])})
         # Create a DataFrame from the list of dictionaries
         df = pd.DataFrame(final)
         df['start_time'] = df['start_time'].astype(int)
         df['end_time'] = df['end_time'].astype(int)
-        df['prob'] = df['prob'].map(lambda x: '%.6f' % x)
+        # df['prob'] = df['prob'].map(lambda x: '%.6f' % x)
         df.sort_values(by=['start_time'], inplace=True)
         if DEBUG:
             print("dataframe: \n", df)
@@ -325,6 +367,8 @@ class MyMainWindow(QMainWindow):
             print("region_item.sigRegionChanged.connect(lambda: self.update_changed_time(var, prob, region_item.getRegion()))")
         region_item.sigRegionChanged.connect(lambda: self.update_changed_time(var, prob, region_item))
         region_item.sigRegionChangeFinished.connect(lambda: self.adjust_next_region(region_item))
+        region_item.clicked.connect(lambda: self.update_linedit(region_item, var, prob))
+        # region_item.sigRegionChanged.connect(lambda: self.update_linedit(region_item))
 
     def adjust_next_region(self, current_region_item):
         if current_region_item.movable:
@@ -700,8 +744,13 @@ class MyMainWindow(QMainWindow):
         # Set the y-axis range of the spectrogram plot to span from -1 to +1
         img.setRect(0, 0, audio_duration * 1e7, sample_rate / 2)
         # Generate a lookup table (lut) using Viridis colormap
-        cmap = plt.get_cmap('YlGnBu')
-        lut = (cmap(np.linspace(0, 1, 256)) * 255).astype(np.uint8)
+        # Create inverted grayscale colormap
+        gray_values = np.linspace(255, 0, 256)
+        cmap = pg.ColorMap([0, 1], [(0, 0, 0), (255, 255, 255)])  # Start and end colors are black and white
+        lut = cmap.getLookupTable(0.0, 1.0, 256)
+        lut[:, 0:3] = np.vstack((gray_values, gray_values, gray_values)).T
+
+        # Set the lookup table for the image
         img.setLookupTable(lut)
         # Convert the image to a QPixmap and then to a QImage with the desired resolution
         image_width = 1920 * 4
